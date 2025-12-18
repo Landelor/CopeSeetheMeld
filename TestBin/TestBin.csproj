@@ -1,20 +1,12 @@
 <Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0-windows</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+    </PropertyGroup>
 
-  <PropertyGroup>
-    <OutputType>Exe</OutputType>
-    <TargetFramework>net9.0-windows</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-  </PropertyGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="..\CopeSeetheMeld\CopeSeetheMeld.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Reference Include="Newtonsoft.Json">
-      <HintPath>..\..\..\..\AppData\Roaming\XIVLauncher\addon\Hooks\dev\Newtonsoft.Json.dll</HintPath>
-    </Reference>
-  </ItemGroup>
-
+    <ItemGroup>
+        <ProjectReference Include="..\CopeSeetheMeld\CopeSeetheMeld.csproj" />
+    </ItemGroup>
 </Project>
