@@ -35,12 +35,14 @@ public partial class MainWindow : Window, IDisposable
     public override void OnOpen()
     {
         Plugin.Config.IsOpen = true;
+        Plugin.Config.Save();
         base.OnOpen();
     }
 
     public override void OnClose()
     {
         Plugin.Config.IsOpen = false;
+        Plugin.Config.Save();
         base.OnClose();
     }
 
