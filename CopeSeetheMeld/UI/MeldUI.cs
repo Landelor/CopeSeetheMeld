@@ -16,7 +16,7 @@ namespace CopeSeetheMeld.UI;
 internal class MeldUI : IDisposable
 {
     private static Configuration Config => Plugin.Config;
-    private readonly UldWrapper materiaUld = Plugin.PluginInterface.UiBuilder.LoadUld("ui/uld/ItemDetail.uld");
+    private readonly UldWrapper? materiaUld;
     private readonly ReadOnlyCollection<IDalamudTextureWrap?> materiaIcons;
     private readonly MeldOptions meldOptions = Config.LastUsedOptions;
     private readonly Automation auto;
@@ -30,12 +30,37 @@ internal class MeldUI : IDisposable
         int[] iconParts = [6, 5, 4, 3, 21, 23, 25, 27, 29, 31, 33, 35];
         int[] iconOvermeldParts = [20, 19, 18, 17, 22, 24, 26, 28, 30, 32, 34, 36];
 
-        materiaIcons = iconParts.Concat(iconOvermeldParts).Select(p => materiaUld.LoadTexturePart("ui/uld/ItemDetail_hr1.tex", p)).ToList().AsReadOnly();
+        try
+        {
+            materiaUld = Plugin.PluginInterface.UiBuilder.LoadUld("ui/uld/ItemDetail.uld");
+        }
+        catch (Exception e)
+        {
+            Plugin.Log.Warning(e, "Failed to load materia icon ULD - materia icons will be unavailable");
+        }
+
+        materiaIcons = iconParts.Concat(iconOvermeldParts).Select(LoadMateriaIcon).ToList().AsReadOnly();
+    }
+
+    private IDalamudTextureWrap? LoadMateriaIcon(int part)
+    {
+        if (materiaUld == null)
+            return null;
+
+        try
+        {
+            return materiaUld.LoadTexturePart("ui/uld/ItemDetail_hr1.tex", part);
+        }
+        catch (Exception e)
+        {
+            Plugin.Log.Warning(e, $"Failed to load materia icon texture part {part} - this icon will be unavailable");
+            return null;
+        }
     }
 
     public void Dispose()
     {
-        materiaUld.Dispose();
+        materiaUld?.Dispose();
         foreach (var item in materiaIcons)
             item?.Dispose();
     }
