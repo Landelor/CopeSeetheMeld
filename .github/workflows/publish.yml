@@ -1,9 +1,12 @@
-name: Build & Publish to Dynamis
+name: Build & Publish Release
 
 on:
   push:
     tags:
       - "v*.*.*.*"
+
+permissions:
+  contents: write
 
 jobs:
   Build:
@@ -35,15 +38,19 @@ jobs:
       - name: Build Project
         run: dotnet build --configuration Release CopeSeetheMeld/CopeSeetheMeld.csproj -p:AssemblyVersion=${{ env.tag }}
 
-      - name: Publish Version
-        uses: PunishXIV/dynamis-action@v1
-        id: dynamis
-        with:
-          plugin_id: 69
-          internal_name: "CopeSeetheMeld"
-          version_number: ${{ env.tag }}
-          path: "CopeSeetheMeld/bin/Release/CopeSeetheMeld/latest.zip"
-          type: "latest"
-          dalamud_version: "15"
+      - name: Build repo.json
+        run: |
+          jq --arg repo "https://github.com/${{ github.repository }}" \
+             --arg zip "https://github.com/${{ github.repository }}/releases/download/v${{ env.tag }}/latest.zip" \
+             '. + {RepoUrl: $repo, DownloadLinkInstall: $zip, DownloadLinkTesting: $zip, DownloadLinkUpdate: $zip}' \
+             CopeSeetheMeld/bin/Release/CopeSeetheMeld/CopeSeetheMeld.json | jq -s '.' > repo.json
+
+      - name: Create GitHub Release
         env:
-          PUBLISHER_KEY: ${{ secrets.PUBLISHER_KEY }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "v${{ env.tag }}" \
+            "CopeSeetheMeld/bin/Release/CopeSeetheMeld/latest.zip" \
+            "repo.json" \
+            --title "v${{ env.tag }}" \
+            --generate-notes
