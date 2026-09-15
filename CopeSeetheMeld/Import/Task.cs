@@ -14,8 +14,16 @@ public partial class Import(string input) : AutoTask
     [GeneratedRegex(@"https?:\/\/etro\.gg\/gearset\/([^/]+)", RegexOptions.IgnoreCase, "en-US")]
     private static partial Regex PatternEtro();
 
-    [GeneratedRegex(@"(?:https?:\/\/xivgear\.app\/\?page=sl\||https?:\/\/api\.xivgear\.app\/shortlink\/)([a-zA-Z0-9-]+)(?:&(?:selectedIndex|onlySetIndex)=(\d+))?", RegexOptions.IgnoreCase, "en-US")]
+    // xivgear now defaults to path-based share links (xivgear.app/sl/<id>, optionally
+    // xivgear.app/embed/sl/<id>) but the old query-based links (?page=sl|<id>) are still
+    // valid, as is hitting the shortlink API directly.
+    [GeneratedRegex(@"https?:\/\/(?:xivgear\.app\/(?:\?page=sl\||(?:embed\/)?sl\/)|api\.xivgear\.app\/shortlink\/)([a-zA-Z0-9-]+)", RegexOptions.IgnoreCase, "en-US")]
     private static partial Regex PatternXIVG();
+
+    // selectedIndex/onlySetIndex can appear anywhere in the query string (order isn't guaranteed),
+    // so it's matched independently of the shortlink id instead of as a trailing group.
+    [GeneratedRegex(@"[?&](?:selectedIndex|onlySetIndex)=(\d+)", RegexOptions.IgnoreCase, "en-US")]
+    private static partial Regex PatternXIVGIndex();
 
     protected override async Task Execute()
     {
@@ -43,7 +51,8 @@ public partial class Import(string input) : AutoTask
         if (m2.Success)
         {
             Status = "Importing from xivgear";
-            await ImportXIVG(m2.Groups[1].Value, m2.Groups[2].Value);
+            var ix = PatternXIVGIndex().Match(input);
+            await ImportXIVG(m2.Groups[1].Value, ix.Success ? ix.Groups[1].Value : "");
             return;
         }
 
