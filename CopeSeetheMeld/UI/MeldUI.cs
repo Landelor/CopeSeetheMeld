@@ -28,6 +28,9 @@ internal class MeldUI : IDisposable
     private MeldLog? gatherLog;
     private Gathering.Report? gatherReport;
 
+    private bool autoGatherPopupOpen;
+    private AutoGather? autoGather;
+
     public MeldUI(Automation auto)
     {
         this.auto = auto;
@@ -125,6 +128,7 @@ internal class MeldUI : IDisposable
         DrawLogsPopup();
         DrawConfigurePopup();
         DrawGatherPopup();
+        DrawAutoGatherPopup();
 
         var rename = gs.Name;
         if (ImGui.InputText("Name", ref rename, 255, ImGuiInputTextFlags.EnterReturnsTrue))
@@ -180,6 +184,19 @@ internal class MeldUI : IDisposable
 
         if (ImGui.IsItemHovered())
             ImGui.SetTooltip("Work out what materia is still missing for this gearset, withdraw any of it that's on the retainer you currently have open, and report (via Allagan Tools) which retainer has the rest - or whether there's a shortage.");
+
+        ImGui.SameLine();
+        using (ImRaii.Disabled(Game.PlayerIsBusy || auto.Running))
+            if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.Route, "Auto-gather (walk to bell)"))
+            {
+                autoGather = new AutoGather(gs, meldOptions);
+                auto.Start(autoGather);
+                autoGatherPopupOpen = true;
+                ImGui.OpenPopup("###autogather");
+            }
+
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip("Fully automatic: walks to the nearest Summoning Bell (needs vnavmesh), opens each retainer Allagan Tools says holds the missing materia, withdraws it, and reports any shortfall. Set a home aetheryte in Options for Lifestream to teleport to when no bell is nearby.");
 
         CheckGatherCompletion();
 
@@ -328,6 +345,20 @@ internal class MeldUI : IDisposable
             return;
 
         meldOptions.Draw();
+
+        ImGui.Dummy(new(0, 8));
+        ImGui.Separator();
+        ImGui.Dummy(new(0, 4));
+
+        var homeAetheryte = Config.GatherHomeAetheryte;
+        ImGui.SetNextItemWidth(200);
+        if (ImGui.InputText("Home aetheryte (Lifestream)", ref homeAetheryte, 64))
+        {
+            Config.GatherHomeAetheryte = homeAetheryte;
+            Config.Save();
+        }
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip("Optional: an aetheryte name for Auto-gather to teleport to (via Lifestream) if no Summoning Bell is nearby. Leave blank to just report that none was found.");
     }
 
     // once the dry-run gather pass finishes, work out what's missing and where to find it
@@ -368,6 +399,42 @@ internal class MeldUI : IDisposable
             ImGui.CloseCurrentPopup();
             gatherLog = null;
             gatherReport = null;
+        }
+    }
+
+    private void DrawAutoGatherPopup()
+    {
+        if (autoGather == null)
+            return;
+
+        using var p = ImRaii.PopupModal("###autogather", ref autoGatherPopupOpen, ImGuiWindowFlags.NoScrollbar);
+        if (!p)
+            return;
+
+        var running = auto.CurrentTask == autoGather;
+
+        ImGui.TextUnformatted(running ? $"Working: {autoGather.Status}" : autoGather.Done ? "Finished." : "Stopped - see errors below.");
+        ImGui.Spacing();
+
+        ImGui.SetNextItemWidth(-1);
+        using (ImRaii.ListBox("###autogathermodalscroll"))
+            foreach (var msg in autoGather.Messages)
+                ImGui.TextUnformatted(msg);
+
+        if (!running && auto.LastError is { } ge)
+            using (ImRaii.PushColor(ImGuiCol.Text, new Vector4(1, 0.4f, 0.4f, 1)))
+                foreach (var inner in ge.InnerExceptions)
+                    ImGui.TextUnformatted(inner.Message);
+
+        if (running)
+        {
+            if (ImGui.Button("Cancel"))
+                auto.Stop();
+        }
+        else if (ImGui.Button("Close"))
+        {
+            ImGui.CloseCurrentPopup();
+            autoGather = null;
         }
     }
 }

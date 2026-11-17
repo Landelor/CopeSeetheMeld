@@ -96,6 +96,11 @@ public class Configuration : IPluginConfiguration
     public List<Gearset> GearsetList = [];
     public int SelectedIndex = -1;
 
+    // Optional: aetheryte name for Lifestream to teleport to when auto-gathering and no
+    // Summoning Bell is in range nearby. Left blank, auto-gather just reports that no bell
+    // is nearby instead of guessing a destination.
+    public string GatherHomeAetheryte = "";
+
     public Gearset? GetSelected()
     {
         if (SelectedIndex >= 0 && SelectedIndex < GearsetList.Count)

@@ -1,11 +1,17 @@
 using Dalamud.Game.ClientState.Conditions;
+using Dalamud.Game.ClientState.Objects.Enums;
+using Dalamud.Game.ClientState.Objects.Types;
 using FFXIVClientStructs.FFXIV.Client.Game;
+using FFXIVClientStructs.FFXIV.Client.Game.Control;
 using FFXIVClientStructs.FFXIV.Client.UI;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using FFXIVClientStructs.Interop;
+using Lumina.Excel.Sheets;
 using System;
+using System.Numerics;
 using ValueType = FFXIVClientStructs.FFXIV.Component.GUI.AtkValueType;
+using GameObjectStruct = FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject;
 
 namespace CopeSeetheMeld;
 
@@ -157,5 +163,103 @@ internal static unsafe class Game
         }
 
         return withdrawn;
+    }
+
+    private static string? cachedBellName;
+
+    // Localized "Summoning Bell" object name (EObjName row 2000401) - the technique used by
+    // AutoRetainer/RetainerReach for bell detection.
+    private static string BellName => cachedBellName ??= Plugin.LuminaRow<EObjName>(2000401).Singular.ExtractText();
+
+    private static bool IsBell(IGameObject obj)
+        => obj.ObjectKind is ObjectKind.EventObj or ObjectKind.HousingEventObject
+           && string.Equals(obj.Name.ToString(), BellName, StringComparison.OrdinalIgnoreCase);
+
+    // The nearest Summoning Bell to the player in the current zone, or null if none is
+    // loaded/visible nearby (Dalamud's object table only sees nearby-streamed objects).
+    public static IGameObject? NearestBell()
+    {
+        var playerPos = Plugin.ObjectTable.LocalPlayer?.Position;
+        if (playerPos == null)
+            return null;
+
+        IGameObject? nearest = null;
+        var best = float.MaxValue;
+        foreach (var obj in Plugin.ObjectTable)
+        {
+            if (!IsBell(obj))
+                continue;
+
+            var d = Vector3.Distance(playerPos.Value, obj.Position);
+            if (d < best)
+            {
+                best = d;
+                nearest = obj;
+            }
+        }
+
+        return nearest;
+    }
+
+    // True once close enough to bell to interact with it.
+    public static bool IsNearBell(IGameObject bell, float range = 4.6f)
+    {
+        var playerPos = Plugin.ObjectTable.LocalPlayer?.Position;
+        return playerPos != null && bell.IsTargetable && Vector3.Distance(playerPos.Value, bell.Position) <= range;
+    }
+
+    public static void InteractWithBell(IGameObject bell)
+        => TargetSystem.Instance()->InteractWithObject((GameObjectStruct*)bell.Address, false);
+
+    // Selects the named retainer from the currently-open RetainerList. Returns true once the
+    // selection was fired; false if RetainerList isn't open/active or the name isn't in it.
+    public static bool SelectRetainerByName(string name)
+    {
+        var agent = AgentRetainerList.Instance();
+        if (agent == null || !agent->IsAgentActive())
+            return false;
+
+        foreach (var r in agent->Retainers)
+        {
+            if (!string.Equals(r.Name.ToString(), name, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            FireCallback("RetainerList", [2, r.Index, 0, 0]);
+            return true;
+        }
+
+        return false;
+    }
+
+    // Index of the first SelectString entry whose text contains any of the given keywords
+    // (case-insensitive); -1 if the addon isn't open or none match. Matching on live display
+    // text (rather than a hardcoded Addon-sheet row id) so this keeps working even if the
+    // exact row id is wrong/changes - it only ever picks an entry whose text we recognize.
+    public static int FindSelectStringEntry(params string[] keywords)
+    {
+        var addon = (AddonSelectString*)GetActiveAddon("SelectString");
+        if (addon == null)
+            return -1;
+
+        for (var i = 0; i < addon->PopupMenu.EntryCount; i++)
+        {
+            var text = addon->PopupMenu.EntryNames[i].ToString();
+            foreach (var kw in keywords)
+                if (text.Contains(kw, StringComparison.OrdinalIgnoreCase))
+                    return i;
+        }
+
+        return -1;
+    }
+
+    // Name of whichever retainer-items addon is currently open ("InventoryRetainer" or the
+    // "Large" variant used for higher-level retainers), or null if neither is open.
+    public static string? ActiveRetainerInventoryAddon()
+    {
+        if (IsAddonActive("InventoryRetainerLarge"))
+            return "InventoryRetainerLarge";
+        if (IsAddonActive("InventoryRetainer"))
+            return "InventoryRetainer";
+        return null;
     }
 }

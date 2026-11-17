@@ -63,6 +63,14 @@ public abstract class AutoTask
     // implementations are typically expected to be async (coroutines)
     protected abstract Task Execute();
 
+    // Runs Execute() directly, without going through Automation's single-task scheduling.
+    // Only for a task known to never actually need to wait on live game state (e.g. a
+    // dry-run computation) that another task wants to await inline as a sub-step; it's
+    // still a normal coroutine, so any real WaitWhile/NextFrame inside it keeps working
+    // correctly as long as the caller is itself already running on the Framework thread
+    // (i.e. called from inside another AutoTask's own Execute()).
+    public Task RunDirect() => Execute();
+
     protected CancellationToken CancelToken => cts.Token;
 
     // wait for a few frames
