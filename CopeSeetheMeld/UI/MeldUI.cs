@@ -24,6 +24,10 @@ internal class MeldUI : IDisposable
     private bool popupOpen;
     private MeldLog? meldLog;
 
+    private bool gatherPopupOpen;
+    private MeldLog? gatherLog;
+    private Gathering.Report? gatherReport;
+
     public MeldUI(Automation auto)
     {
         this.auto = auto;
@@ -120,6 +124,7 @@ internal class MeldUI : IDisposable
     {
         DrawLogsPopup();
         DrawConfigurePopup();
+        DrawGatherPopup();
 
         var rename = gs.Name;
         if (ImGui.InputText("Name", ref rename, 255, ImGuiInputTextFlags.EnterReturnsTrue))
@@ -156,6 +161,27 @@ internal class MeldUI : IDisposable
             ImGui.Text(FontAwesomeIcon.InfoCircle.ToIconString());
         if (ImGui.IsItemHovered())
             ImGui.SetTooltip($"Don't do any melds - just output what changes would be made given current gear.");
+
+        using (ImRaii.Disabled(Game.PlayerIsBusy))
+            if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.Truck, "Gather from retainer"))
+            {
+                var gatherOpts = new MeldOptions
+                {
+                    DryRun = true,
+                    Overmeld = meldOptions.Overmeld,
+                    MeldConfidence = meldOptions.MeldConfidence,
+                    StopOnMissingItem = MeldOptions.StopBehavior.Skip,
+                    StopOnMissingMateria = MeldOptions.StopBehavior.Skip,
+                };
+                gatherLog = new();
+                gatherReport = null;
+                auto.Start(new Meld(gs, gatherOpts, gatherLog));
+            }
+
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip("Work out what materia is still missing for this gearset, withdraw any of it that's on the retainer you currently have open, and report (via Allagan Tools) which retainer has the rest - or whether there's a shortage.");
+
+        CheckGatherCompletion();
 
         if (auto.LastError is { } e)
             foreach (var inner in e.InnerExceptions)
@@ -302,5 +328,46 @@ internal class MeldUI : IDisposable
             return;
 
         meldOptions.Draw();
+    }
+
+    // once the dry-run gather pass finishes, work out what's missing and where to find it
+    private void CheckGatherCompletion()
+    {
+        if (gatherLog is not { Done: true } || gatherReport != null)
+            return;
+
+        gatherLog.Count();
+        gatherReport = Gathering.Run(gatherLog.MateriaNeeded);
+        gatherPopupOpen = true;
+        ImGui.OpenPopup("###gatherreport");
+    }
+
+    private void DrawGatherPopup()
+    {
+        if (gatherReport == null)
+            return;
+
+        using var p = ImRaii.PopupModal("###gatherreport", ref gatherPopupOpen, ImGuiWindowFlags.NoScrollbar);
+        if (!p)
+            return;
+
+        if (gatherReport.AnyShortage)
+        {
+            using (ImRaii.PushColor(ImGuiCol.Text, new Vector4(1, 0.4f, 0.4f, 1)))
+                ImGui.TextUnformatted("One or more materia are short - see below.");
+            ImGui.Spacing();
+        }
+
+        ImGui.SetNextItemWidth(-1);
+        using (ImRaii.ListBox("###gathermodalscroll"))
+            foreach (var msg in gatherReport.Messages)
+                ImGui.TextUnformatted(msg);
+
+        if (ImGui.Button("Close"))
+        {
+            ImGui.CloseCurrentPopup();
+            gatherLog = null;
+            gatherReport = null;
+        }
     }
 }
